@@ -6,9 +6,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/wangbin/jiebago/dictionary"
-	"github.com/wangbin/jiebago/finalseg"
-	"github.com/wangbin/jiebago/util"
+	"github.com/jaysharp/jiebago/dictionary"
+	"github.com/jaysharp/jiebago/finalseg"
+	"github.com/jaysharp/jiebago/posseg"
+	"github.com/jaysharp/jiebago/util"
 )
 
 var (
@@ -20,23 +21,24 @@ var (
 )
 
 // Segmenter is a Chinese words segmentation struct.
+// 更改原jieba的成员
 type Segmenter struct {
-	dict *Dictionary
+	Dict *posseg.MyDictionary
 }
 
 // Frequency returns a word's frequency and existence
 func (seg *Segmenter) Frequency(word string) (float64, bool) {
-	return seg.dict.Frequency(word)
+	return seg.Dict.Frequency(word)
 }
 
 // AddWord adds a new word with frequency to dictionary
 func (seg *Segmenter) AddWord(word string, frequency float64) {
-	seg.dict.AddToken(dictionary.NewToken(word, frequency, ""))
+	seg.Dict.AddToken(dictionary.NewToken(word, frequency, ""))
 }
 
 // DeleteWord removes a word from dictionary
 func (seg *Segmenter) DeleteWord(word string) {
-	seg.dict.AddToken(dictionary.NewToken(word, 0.0, ""))
+	seg.Dict.AddToken(dictionary.NewToken(word, 0.0, ""))
 }
 
 /*
@@ -57,14 +59,14 @@ func (seg *Segmenter) SuggestFrequency(words ...string) float64 {
 	frequency := 1.0
 	if len(words) > 1 {
 		for _, word := range words {
-			if freq, ok := seg.dict.Frequency(word); ok {
+			if freq, ok := seg.Dict.Frequency(word); ok {
 				frequency *= freq
 			}
-			frequency /= seg.dict.total
+			frequency /= seg.Dict.Total
 		}
-		frequency, _ = math.Modf(frequency * seg.dict.total)
+		frequency, _ = math.Modf(frequency * seg.Dict.Total)
 		wordFreq := 0.0
-		if freq, ok := seg.dict.Frequency(strings.Join(words, "")); ok {
+		if freq, ok := seg.Dict.Frequency(strings.Join(words, "")); ok {
 			wordFreq = freq
 		}
 		if wordFreq < frequency {
@@ -73,15 +75,15 @@ func (seg *Segmenter) SuggestFrequency(words ...string) float64 {
 	} else {
 		word := words[0]
 		for segment := range seg.Cut(word, false) {
-			if freq, ok := seg.dict.Frequency(segment); ok {
+			if freq, ok := seg.Dict.Frequency(segment); ok {
 				frequency *= freq
 			}
-			frequency /= seg.dict.total
+			frequency /= seg.Dict.Total
 		}
-		frequency, _ = math.Modf(frequency * seg.dict.total)
+		frequency, _ = math.Modf(frequency * seg.Dict.Total)
 		frequency += 1.0
 		wordFreq := 1.0
-		if freq, ok := seg.dict.Frequency(word); ok {
+		if freq, ok := seg.Dict.Frequency(word); ok {
 			wordFreq = freq
 		}
 		if wordFreq > frequency {
@@ -94,15 +96,15 @@ func (seg *Segmenter) SuggestFrequency(words ...string) float64 {
 // LoadDictionary loads dictionary from given file name. Everytime
 // LoadDictionary is called, previously loaded dictionary will be cleard.
 func (seg *Segmenter) LoadDictionary(fileName string) error {
-	seg.dict = &Dictionary{freqMap: make(map[string]float64)}
-	return seg.dict.loadDictionary(fileName)
+	seg.Dict.Dictionary = posseg.Dictionary{FreqMap: make(map[string]float64)}
+	return seg.Dict.LoadDictionary(fileName)
 }
 
 // LoadUserDictionary loads a user specified dictionary, it must be called
 // after LoadDictionary, and it will not clear any previous loaded dictionary,
 // instead it will override exist entries.
 func (seg *Segmenter) LoadUserDictionary(fileName string) error {
-	return seg.dict.loadDictionary(fileName)
+	return seg.Dict.LoadDictionary(fileName)
 }
 
 func (seg *Segmenter) dag(runes []rune) map[int][]int {
@@ -115,7 +117,7 @@ func (seg *Segmenter) dag(runes []rune) map[int][]int {
 		i = k
 		frag = runes[k : k+1]
 		for {
-			freq, ok := seg.dict.Frequency(string(frag))
+			freq, ok := seg.Dict.Frequency(string(frag))
 			if !ok {
 				break
 			}
@@ -148,10 +150,10 @@ func (seg *Segmenter) calc(runes []rune) map[int]route {
 	var r route
 	for idx := n - 1; idx >= 0; idx-- {
 		for _, i := range dag[idx] {
-			if freq, ok := seg.dict.Frequency(string(runes[idx : i+1])); ok {
-				r = route{frequency: math.Log(freq) - seg.dict.logTotal + rs[i+1].frequency, index: i}
+			if freq, ok := seg.Dict.Frequency(string(runes[idx : i+1])); ok {
+				r = route{frequency: math.Log(freq) - seg.Dict.LogTotal + rs[i+1].frequency, index: i}
 			} else {
-				r = route{frequency: math.Log(1.0) - seg.dict.logTotal + rs[i+1].frequency, index: i}
+				r = route{frequency: math.Log(1.0) - seg.Dict.LogTotal + rs[i+1].frequency, index: i}
 			}
 			if v, ok := rs[idx]; !ok {
 				rs[idx] = r
@@ -165,7 +167,7 @@ func (seg *Segmenter) calc(runes []rune) map[int]route {
 	return rs
 }
 
-type cutFunc func(sentence string) <-chan string
+type jiebaCutFunc func(sentence string) <-chan string
 
 func (seg *Segmenter) cutDAG(sentence string) <-chan string {
 	result := make(chan string)
@@ -186,7 +188,7 @@ func (seg *Segmenter) cutDAG(sentence string) <-chan string {
 					if len(buf) == 1 {
 						result <- bufString
 					} else {
-						if v, ok := seg.dict.Frequency(bufString); !ok || v == 0.0 {
+						if v, ok := seg.Dict.Frequency(bufString); !ok || v == 0.0 {
 							for x := range finalseg.Cut(bufString) {
 								result <- x
 							}
@@ -208,7 +210,7 @@ func (seg *Segmenter) cutDAG(sentence string) <-chan string {
 			if len(buf) == 1 {
 				result <- bufString
 			} else {
-				if v, ok := seg.dict.Frequency(bufString); !ok || v == 0.0 {
+				if v, ok := seg.Dict.Frequency(bufString); !ok || v == 0.0 {
 					for t := range finalseg.Cut(bufString) {
 						result <- t
 					}
@@ -263,7 +265,7 @@ func (seg *Segmenter) cutDAGNoHMM(sentence string) <-chan string {
 // segmentations, which is suitable for text analysis.
 func (seg *Segmenter) Cut(sentence string, hmm bool) <-chan string {
 	result := make(chan string)
-	var cut cutFunc
+	var cut jiebaCutFunc
 	if hmm {
 		cut = seg.cutDAG
 	} else {
@@ -367,7 +369,7 @@ func (seg *Segmenter) CutForSearch(sentence string, hmm bool) <-chan string {
 				var gram string
 				for i := 0; i < len(runes)-increment+1; i++ {
 					gram = string(runes[i : i+increment])
-					if v, ok := seg.dict.Frequency(gram); ok && v > 0.0 {
+					if v, ok := seg.Dict.Frequency(gram); ok && v > 0.0 {
 						result <- gram
 					}
 				}
