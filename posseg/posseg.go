@@ -49,6 +49,11 @@ func (seg *Segmenter) LoadMyDictionary(fileName string) error {
 	return nil
 }
 
+func (seg *Segmenter) ResetDictionary() {
+	seg.Dict.newFreqMap = make(map[string]float64)
+	seg.Dict.newPosMap = make(map[string]string)
+}
+
 // LoadDictionary loads dictionary from given file name.
 // Everytime LoadDictionary is called, previously loaded dictionary will be cleard.
 func (seg *Segmenter) LoadDictionary(fileName string) error {
