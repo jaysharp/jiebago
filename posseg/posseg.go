@@ -109,17 +109,23 @@ func (seg *Segmenter) cutDetail(sentence string) <-chan Segment {
 				}
 				continue
 			}
-			for _, x := range util.RegexpSplit(reSkipDetail, blk, -1) {
-				if len(x) == 0 {
-					continue
-				}
-				switch {
-				case reNum.MatchString(x):
-					result <- Segment{x, "m"}
-				case reEng.MatchString(x):
-					result <- Segment{x, "eng"}
-				default:
-					result <- Segment{x, "x"}
+			// FIXME: !!! 非汉字的中间无空格的子串，不作拆分
+			segs := util.RegexpSplit(reSkipDetail, blk, -1)
+			if len(segs) > 1 {
+				result <- Segment{blk, "n"}
+			} else {
+				for _, x := range segs {
+					if len(x) == 0 {
+						continue
+					}
+					switch {
+					case reNum.MatchString(x):
+						result <- Segment{x, "m"}
+					case reEng.MatchString(x):
+						result <- Segment{x, "eng"}
+					default:
+						result <- Segment{x, "x"}
+					}
 				}
 			}
 		}
