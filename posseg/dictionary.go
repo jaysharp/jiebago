@@ -35,39 +35,39 @@ func ReloadCommonDictIns(fileName string) error {
 
 // Frequency returns the frequency and existence of give word
 func (myDict *MyDictionary) Frequency(key string) (float64, bool) {
-	myDict.RLock()
 	freq, ok := myDict.newFreqMap[key]
 	if !ok {
 		freq, ok = myDict.FreqMap[key]
 	}
-	myDict.RUnlock()
 	return freq, ok
 }
 
 // Pos returns the POS and existence of give word
 func (myDict *MyDictionary) Pos(key string) (string, bool) {
-	myDict.RLock()
 	pos, ok := myDict.newPosMap[key]
 	if !ok {
 		pos, ok = myDict.PosMap[key]
 	}
-	myDict.RUnlock()
 	return pos, ok
 }
 
 // AddToken adds one token
 func (myDict *MyDictionary) AddMyToken(token dictionary.Token) {
-	myDict.Lock()
 	myDict.addToken(token)
-	myDict.Unlock()
 	myDict.updateLogTotal()
 }
 
 func (myDict *MyDictionary) DelMyWord(word string) {
-	freq := myDict.newFreqMap[word]
-	delete(myDict.newFreqMap, word)
-	delete(myDict.newPosMap, word)
-	myDict.Total -= freq
+	freq, ok := myDict.newFreqMap[word]
+	if ok {
+		delete(myDict.newFreqMap, word)
+		delete(myDict.newPosMap, word)
+		myDict.Total -= freq
+	} else {
+		if _, ok := myDict.FreqMap[word]; ok {
+			myDict.newFreqMap[word] = 0.0
+		}
+	}
 
 	// 自定义名词之间可能共享字符，对于newFreqMap中的一些单字符垃圾暂不作处理
 }
@@ -80,7 +80,9 @@ func (myDict *MyDictionary) addToken(token dictionary.Token) {
 	for i := 0; i < n; i++ {
 		frag := string(runes[:i+1])
 		if _, ok := myDict.newFreqMap[frag]; !ok {
-			myDict.newFreqMap[frag] = 0.0
+			if _, ok := myDict.FreqMap[frag]; !ok {
+				myDict.newFreqMap[frag] = 0.0
+			}
 		}
 	}
 	if len(token.Pos()) > 0 {
